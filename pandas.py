@@ -7,7 +7,8 @@ shipments['cost_per_kg'] = shipments['cost']/shipments['weight_kg'].replace(0,np
 conditions=[(shipments['cost_per_kg'] <5 ), (shipments['cost_per_kg'] >=5) & (shipments['cost_per_kg'] <=15), (shipments['cost_per_kg'] >15) ]  
 choice = ['Low','Medium','High'] 
 shipments['cost_tier'] = np.select(conditions, choices, default='UNKNOWN')
-
+#or
+shipments['cost_tier'] = shipments['cost_per_kg'].apply(lambda x: 'Low' if x<5, else ('Medium' if x<=15 and x>=5 else( 'High' if x>15 else 'unknown')))
 
 """
 You have `sales` with columns: `product_id`, `region`, `month`, `revenue`.
