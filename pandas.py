@@ -1,5 +1,4 @@
 """
-Mock Problem 3 — Apply/Custom Logic
 You have shipments with columns: shipment_id, carrier, cost, weight_kg.
 Task: Add a column cost_tier that labels each shipment as 'Low' if cost_per_kg < 5, 'Medium' if 5–15, 'High' if > 15. (cost_per_kg = cost / weight_kg)
 Write it two ways: once using apply, once using np.select or pd.cut — and briefly say which you'd actually use in practice and why.
