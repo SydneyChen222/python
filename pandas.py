@@ -58,3 +58,26 @@ max_cost = df['cost_per_unit'].max()
 df['normal'] = (df['cost_per_unit'] - min_cost)/ ((max_cost - min_cost) if (max_cost - min_cost) != 0 else np.nan)
 delivery_max = df['delivery_days'].max()
 df['risk_score'] = 0.5 * df['defect_rate'] + 0.3 *df['normal'] + 0.2* (df['delivery_days']/(delivery_max if delievery_max !=0 else np.nan))
+
+"""
+You have orders with columns: customer_id, region, order_date, order_amount.
+Each customer has many orders (multiple rows). Task:
+
+Compute total order amount per customer (customers belong to multiple region)
+Also compute their order count (number of orders)
+Filter out customers with fewer than 3 orders (low-activity, exclude them)
+Rank the remaining customers by total amount within each region, ties share the same rank
+Keep only the top 3 per region
+Sort by region (A→Z), then rank ascending
+"""
+
+
+df = df.groupby(['customer_id','region']).agg(total_order_per_region = ("order_amount","sum"),
+                                              total_count_per_region = ("order_amount","size")).reset_index() # not sure how do we want to deal with NaN in order amount, based on my understanding, this could be size or count if we just ignore those NaN then use count but I think we want all order number so I use size
+df['total_order'] = df.groupby('customer_id')['total_count_per_region'].transform('sum') #getting the total order number per customer
+df = df.loc[df['total_order']>=3]
+
+df['rank'] = df.groupby('region')['total_order_per_region'].rank(method = 'min',ascending=False)
+df = df.loc[df['rank']<=3]
+df = df.sort_values(['region','rank'],ascending = [True,True])
+
