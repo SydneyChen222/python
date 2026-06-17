@@ -75,7 +75,7 @@ Sort by region (A→Z), then rank ascending
 df = df.groupby(['customer_id','region']).agg(total_order_per_region = ("order_amount","sum"),
                                               total_count_per_region = ("order_amount","size")).reset_index() # not sure how do we want to deal with NaN in order amount, based on my understanding, this could be size or count if we just ignore those NaN then use count but I think we want all order number so I use size
 df['total_order'] = df.groupby('customer_id')['total_count_per_region'].transform('sum') #getting the total order number per customer
-df = df.loc[df['total_order']>=3]
+df = df.loc[df['total_order']>=3] #exclude customers with fewer than 3 orders company-wide
 
 df['rank'] = df.groupby('region')['total_order_per_region'].rank(method = 'min',ascending=False)
 df = df.loc[df['rank']<=3]
