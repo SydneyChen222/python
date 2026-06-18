@@ -323,6 +323,38 @@ store_region['rank'] = (
 result = store_region[store_region['rank'] <= 3].sort_values(
     ['region', 'rank'], ascending=[True, True]
 )
+
+"""
+You have remanufacture_log with columns: part_id, supplier_id, defect_type, remfg_date (string), cost_to_remfg, redeployed (bool), defected_again (bool — True if it failed again after redeployment).
+The data is messy (some NaNs). 
+
+Clean: convert remfg_date to datetime; rows where part_id is null should be dropped; fill missing cost_to_remfg with the median
+Compute, per supplier_id: total parts remanufactured, the re-defect rate (% of redeployed parts that defected again), and total remfg cost
+Flag suppliers with a re-defect rate above the 75th percentile as "High Risk"
+Among only "High Risk" suppliers, find the single defect_type that appears most often
+"""
+df['remfg_date'] = pd.to_datetime('df['remfg_date']')  
+df=df.dropna(subset = ['part_id']) 
+med = df['cost_to_remfg'].median()  
+df['cost_to_remfg'] = df['cost_to_remfg'].fillna(med)
+result = df.groupby('supplier_id',as_index=False).agg(total_remfg = ("part_id","size"),
+                                                      re_defect = ("defected_again","sum"),
+                                                      total_remfg_cost=("cost_to_remfg","sum"),
+                                                      redeployed=("redeployed","sum"))  
+result['re_defect_rate'] = result['re_defect'] / result['redeployed'].replace(0,np.nan) # here I am thinking about the redefect rate, so that means a parts has to be redeployed and then re defect again so redeployed is the mandatory request for being redefect so I do not have to think about if a part is not redeployed but redefect. 
+threshold = result['re_defect_rate'].quantile(0.75)  
+result['flag'] = np.where(result['re_defect_rate']>threshold,'High Risk','Low Risk') 
+
+df1 = result.loc[result['flag']=='High Risk'] 
+#or we do not need to merge but 
+"""high_risk_ids = result.loc[result['flag'] == 'High Risk', 'supplier_id']
+final = df[df['supplier_id'].isin(high_risk_ids)]"""
+
+final = pd.merge(df1[['supplier_id']],df[['supplier_id','defect_type']], on='supplier_id',how='left') 
+final = final.groupby('defect_type').agg(number = ("supplier_id","count")).reset_index()  
+final = final.sort_values('number',ascending = False).head(1)
+
+
 """
 **Grain Drill — spot the trap at each step**
 You have `enrollments` with columns: `student_id`, `school`, `district`, `course`, `tuition_paid`.
