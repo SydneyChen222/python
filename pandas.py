@@ -1,4 +1,42 @@
 """
+The goal is to swap the id for each 2 department if the total department number is odd, and keep last department id not swapped
+| id | swapped_id | name    | swapped_name |
+| -- | ---------- | ------- | ------------ |
+| 1  | 2          | HR      | Finance      |
+| 2  | 1          | Finance | HR           |
+| 3  | 4          | Ops     | Sales        |
+| 4  | 3          | Sales   | Ops          |
+| 5  | 5          | Legal   | Legal        |
+
+"""
+import pandas as pd
+
+df = pd.DataFrame({
+    "id": [1, 2, 3, 4, 5],
+    "name": ["HR", "Finance", "Ops", "Sales", "Legal"]
+})
+df = df.sort_values("id").reset_index(drop=True)
+df["swapped_id"] = df["id"]
+df["swapped_name"] = df["name"]
+# odd-position rows: take next row
+mask_odd = df.index % 2 == 0
+df.loc[mask_odd, "swapped_id"] = df["id"].shift(-1)
+df.loc[mask_odd, "swapped_name"] = df["name"].shift(-1)
+
+# even-position rows: take previous row
+mask_even = df.index % 2 == 1
+
+df.loc[mask_even, "swapped_id"] = df["id"].shift(1)
+df.loc[mask_even, "swapped_name"] = df["name"].shift(1)
+# if last row has no pair, keep itself
+df["swapped_id"] = df["swapped_id"].fillna(df["id"]).astype(int)
+df["swapped_name"] = df["swapped_name"].fillna(df["name"])
+
+result = df[["id", "swapped_id", "name", "swapped_name"]]
+
+
+
+"""
 You have shipments with columns: shipment_id, carrier, cost, weight_kg.
 Task: Add a column cost_tier that labels each shipment as 'Low' if cost_per_kg < 5, 'Medium' if 5–15, 'High' if > 15. (cost_per_kg = cost / weight_kg)
 Write it two ways: once using apply, once using np.select or pd.cut — and briefly say which you'd actually use in practice and why.
@@ -294,6 +332,11 @@ For each step, the question is the same: **do I need to dedupe/aggregate to a pa
 2. The **average tuition per student** within each district (i.e. average of each student's *total* tuition, across students in that district)
 3. The **median student total tuition** across the whole dataset
 4. Each student's tuition as a **% of their school's total tuition**
-
 """
+
+
+
+
+
+
 
