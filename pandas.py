@@ -81,3 +81,150 @@ df['rank'] = df.groupby('region')['total_order_per_region'].rank(method = 'min',
 df = df.loc[df['rank']<=3]
 df = df.sort_values(['region','rank'],ascending = [True,True])
 
+"""
+You are given a DataFrame called df:
+
+order_date	customer_id	product_category	revenue
+2026-01-01	101	Electronics	100
+2026-01-05	101	Electronics	150
+2026-01-10	102	Furniture	200
+2026-02-01	101	Electronics	120
+2026-02-15	102	Furniture	300
+2026-02-20	103	Electronics	180
+
+The business team wants to identify high-value customers and monthly revenue trends.
+
+Interview Questions
+Question 1
+Convert order_date to datetime and create two new columns:
+order_month
+day_of_week
+
+Question 2
+Calculate monthly revenue by customer.
+Expected output columns:
+customer_id
+order_month
+monthly_revenue
+
+Question 3
+For each customer, calculate running cumulative revenue over time.
+Expected output columns:
+customer_id
+order_month
+monthly_revenue
+running_revenue
+
+Question 4
+Rank customers within each month by monthly_revenue, highest revenue first.
+If two customers tie, they should share the same rank and the next rank should be skipped, like SQL RANK().
+Create a new column:
+monthly_rank
+
+Question 5
+Return the top 2 customers per month by monthly revenue, including ties.
+Expected logic:
+monthly_rank <= 2
+
+Question 6
+Create a pivot table showing monthly revenue by customer.
+Expected format:
+customer_id	2026-01	2026-02
+101	250	120
+102	200	300
+103	0	180
+
+Question 7
+Create a new column:
+customer_avg_monthly_revenue
+It should show each customer's average monthly revenue repeated on every row.
+
+Question 8
+Create a flag:
+above_customer_avg
+where the row is True if:
+monthly_revenue > customer_avg_monthly_revenue
+Then return only the rows where the customer performed above their own average.
+
+Question 9
+For each customer, calculate month-over-month revenue change.
+Create two columns:
+prev_month_revenue
+mom_change_pct
+Formula:
+mom_change_pct = (monthly_revenue - prev_month_revenue) / prev_month_revenue
+Question 10
+Return the top 1 customer per month by monthly revenue, but do not include ties.
+Return exactly one customer per month.
+"""
+import pandas as pd
+import numpy as np
+df['order_date'] = pd.to_datetime(df['order_date'])
+df['order_month'] = df['order_date'].dt.to_period('M')
+df['day_of_week'] = df['order_date'].dt.day_name()
+monthly = (
+    df.groupby(['customer_id', 'order_month'], as_index=False)
+      .agg(monthly_revenue=('revenue', 'sum'))
+)
+monthly = monthly.sort_values(['customer_id', 'order_month'])
+monthly['running_revenue'] = (
+    monthly.groupby('customer_id')['monthly_revenue']
+           .cumsum()
+)
+monthly['monthly_rank'] = (
+    monthly.groupby('order_month')['monthly_revenue']
+           .rank(method='min', ascending=False)
+)
+top2 = monthly[
+    monthly['monthly_rank'] <= 2
+]
+
+pivot = (
+    monthly.pivot_table(
+        index='customer_id',
+        columns='order_month',
+        values='monthly_revenue',
+        aggfunc='sum',
+        fill_value=0
+    )
+    .reset_index()
+)
+monthly['customer_avg_monthly_revenue'] = (
+    monthly.groupby('customer_id')['monthly_revenue']
+           .transform('mean')
+)
+monthly['above_customer_avg'] = (
+    monthly['monthly_revenue'] >
+    monthly['customer_avg_monthly_revenue']
+)
+above_avg = monthly[
+    monthly['above_customer_avg']
+]
+monthly = monthly.sort_values(['customer_id', 'order_month'])
+
+monthly['prev_month_revenue'] = (
+    monthly.groupby('customer_id')['monthly_revenue']
+           .shift(1)
+)
+monthly['mom_change_pct'] = (
+    (monthly['monthly_revenue'] - monthly['prev_month_revenue'])
+    / monthly['prev_month_revenue'].replace(0, np.nan)
+)
+monthly = monthly.sort_values(
+    ['order_month', 'monthly_revenue'],
+    ascending=[True, False]
+)
+monthly['rank'] = (
+    monthly.groupby('order_month')['monthly_revenue']
+           .rank(method='first', ascending=False)
+)
+top1 = monthly[
+    monthly['rank'] == 1
+]
+
+
+
+
+
+
+
