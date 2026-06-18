@@ -221,7 +221,33 @@ monthly['rank'] = (
 top1 = monthly[
     monthly['rank'] == 1
 ]
+"""
+**Mock Round — Realistic Multi-Step #1**
+`shipments`:
+- `shipment_id`, `supplier_id`, `part_id`, `ship_date` (string), `cost`, `units`
 
+`suppliers`:
+- `supplier_id`, `supplier_name`, `country`
+
+Tasks:
+1. Convert `ship_date` to datetime, and create a `month` column (e.g. the year-month period)
+2. Join the supplier names and countries onto the shipments
+3. Compute `cost_per_unit` for each shipment (guard against divide-by-zero)
+4. For each `supplier_name`, compute: total cost, total units, average cost_per_unit, and number of shipments — in one agg call
+5. Flag the **top 3 suppliers by total cost** with a `tier` column = `"Key"`, everyone else `"Standard"`
+6. Return that supplier summary sorted by total cost descending
+"""
+shipments['ship_date'] = pd.to_datetime(shipments['ship_date'])  
+shipments['month'] = shipments['ship_date'].dt.to_period('M') 
+df= pd.merge(shipments,suppliers,on='supplier_id',how='left')  
+df['cost_per_unit'] = df['cost']/df['units'].replace(0,np.nan) 
+df = df.groupby('supplier_name',as_index= False).agg(total_cost=("cost","sum"),
+                                                     total_units = ("units","sum"),
+                                                     average_cost_per_unit=("cost_per_unit","mean"), 
+                                                     num_of_shipments=("shipment_id","size")) #I assume the shipment_id is a column without nulls so I use size, if there is null then I will use count   
+df['rank'] = df['total_cost'].rank(method='min',ascending = False)  
+df['tier'] = np.where(df['rank']<=3,"Key","Standard")  
+result = df.sort_values(['total_cost'],ascending =False) # for Q5 not sure how we deal with ties so I assume the top 3 means the top 3 revenue so I use min to get the ties also showed up, but if we only want to get 3 rows in result no matter if there is ties then i will use 'first'
 
 
 
