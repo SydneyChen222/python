@@ -270,6 +270,30 @@ daily_sales['pct_of_region'] = daily_sales['total_rev_store']/daily_sales['total
 store_totals = daily_sales[['store_id', 'total_rev_store']].drop_duplicates() # make sure we have clean data when we want to doany distribution calculation or it will find wrong one with duplicates data
 top_rev = daily_sales['total_rev_store'].quantile(0.9) 
 result = daily_sales[daily_sales['total_rev_store']>=top_rev]
+"""
+ top n stores within region if one store could show up in multiple regions
+"""
+# Step 1: collapse to store + region grain (revenue per store IN each region)
+store_region = (
+    daily_sales.groupby(['region', 'store_id'], as_index=False)['revenue'].sum()
+)
+# Step 2: rank stores WITHIN each region
+store_region['rank'] = (
+    store_region.groupby('region')['revenue'].rank(method='min', ascending=False)
+)
+# Step 3: keep top 3 per region
+result = store_region[store_region['rank'] <= 3].sort_values(
+    ['region', 'rank'], ascending=[True, True]
+)
+"""
+**Grain Drill — spot the trap at each step**
+You have `enrollments` with columns: `student_id`, `school`, `district`, `course`, `tuition_paid`.
+Each student takes multiple courses (so multiple rows per student). A student belongs to one school; a school belongs to one district.
+For each step, the question is the same: **do I need to dedupe/aggregate to a particular grain first, or can I work on the raw rows?** Say your reasoning, then code.
+1. Total tuition collected per district
+2. The **average tuition per student** within each district (i.e. average of each student's *total* tuition, across students in that district)
+3. The **median student total tuition** across the whole dataset
+4. Each student's tuition as a **% of their school's total tuition**
 
-
+"""
 
