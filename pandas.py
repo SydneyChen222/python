@@ -249,8 +249,27 @@ df['rank'] = df['total_cost'].rank(method='min',ascending = False)
 df['tier'] = np.where(df['rank']<=3,"Key","Standard")  
 result = df.sort_values(['total_cost'],ascending =False) # for Q5 not sure how we deal with ties so I assume the top 3 means the top 3 revenue so I use min to get the ties also showed up, but if we only want to get 3 rows in result no matter if there is ties then i will use 'first'
 
-
-
+"""
+You have `daily_sales` with columns: `store_id`, `region`, `date` (string), `revenue`.
+assume each store belongs to exactly one region
+Multiple rows per store (one per day). Work through these — and for **each step, before you write code, say one word: "collapse" or "keep"** (i.e. does this step reduce to fewer rows, or keep all rows?). That's the muscle I want you to build.
+1. Convert `date` to datetime and sort by `store_id`, `date`
+2. Add a `cumulative_revenue` column — running total of revenue per store over time
+3. Add a `rolling_7day_avg` — 7-day rolling average of revenue per store
+4. Compute total revenue per store (one number per store)
+5. Add a column `pct_of_region` — each store's total as a % of its region's total revenue
+6. Find stores in the **top 10%** by total revenue (the 90th percentile threshold and above)
+"""
+daily_sales['date'] = pd.to_datetime(daily_sales['date'])  
+daily_sales = daily_sales.sort_values(['store_id','date'],ascending = [True,True]) 
+daily_sales['cumulative_revenue'] = daily_sales.groupby('store_id')['revenue'].cumsum() # keep all rows but running total by store which means the store_id will be the partition by in SQL and cumsum() is the one that expanding the same rows.
+daily_sales['rolling_7day_avg'] = daily_sales.groupby('store_id')['revenue'].transform(lambda x : x.rolling('7').mean()) # keep all rows but again we need reset by store so i need groupby and also here I do not know if we care about the data leakage or not, if we calculate the 7 days rolling average without current day then I will need to do x.shift(1).rolling(7)
+daily_sales['total_rev_store'] = daily_sales.groupby('store_id')['revenue'].transform('sum') # keep all rows since we are going to use this total_revenue_per_store in next part. so I use transform('sum') to expanding all rows with the total per store. # pause here i will be back for Q5 and 5
+daily_sales['total_rev_region'] = daily_sales.groupby('region')['revenue'].transform('sum')
+daily_sales['pct_of_region'] = daily_sales['total_rev_store']/daily_sales['total_rev_region'].replace(0,np.nan)
+store_totals = daily_sales[['store_id', 'total_rev_store']].drop_duplicates() # make sure we have clean data when we want to doany distribution calculation or it will find wrong one with duplicates data
+top_rev = daily_sales['total_rev_store'].quantile(0.9) 
+result = daily_sales[daily_sales['total_rev_store']>=top_rev]
 
 
 
