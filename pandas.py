@@ -36,6 +36,17 @@ result = df[["id", "swapped_id", "name", "swapped_name"]]
 
 
 
+"""Two Sum"""
+class Solution:
+    def twoSum(self, nums: List[int], target: int) -> List[int]:
+        n = len(nums)
+        for i in range(n):
+            for j in range(i + 1, n):
+                if nums[i] + nums[j] == target:
+                    return [i, j]
+        return []
+
+
 """
 You have shipments with columns: shipment_id, carrier, cost, weight_kg.
 Task: Add a column cost_tier that labels each shipment as 'Low' if cost_per_kg < 5, 'Medium' if 5–15, 'High' if > 15. (cost_per_kg = cost / weight_kg)
