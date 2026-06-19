@@ -368,7 +368,7 @@ For each step, the question is the same: **do I need to dedupe/aggregate to a pa
 df = enrollments.groupby('district',as_index = False).agg(total_tuition = ("tuition_paid","sum"))
 enrollments['district_tuition'] = enrollments.groupby('district')['tuition_paid'].transform('sum')
 enrollments['student_total'] = enrollments.groupby('student_if')['tuition_paid'].transform('sum')
-# Stage 1: each student's TOTAL (sum their courses)
+#2  Stage 1: each student's TOTAL (sum their courses)
 student_totals = enrollments.groupby(['district','student_id'], as_index=False).agg(
     student_total=("tuition_paid","sum")
 )
@@ -376,14 +376,36 @@ student_totals = enrollments.groupby(['district','student_id'], as_index=False).
 df2 = student_totals.groupby('district', as_index=False).agg(
     avg_per_student=("student_total","mean")
 )
+#3
 student_totals = enrollments.groupby('student_id', as_index=False).agg(
     student_total=("tuition_paid", "sum")
 )
 med = student_totals['student_total'].median()
+#4
 df3 = enrollments.groupby(['student_id','school'],as_index=False).agg(student_school_paid = ("tuition_paid","sum"))
 df3['school_total'] = df3.groupby('school')['student_school_paid'].transform('sum')
 df3['perc'] = df3['tuition_paid']/df3['school_total'].replace(0,np.nan)
 
+
+"""
+| supplier | part    | units_inspected | defective_units | lead_time_days |
+| -------- | ------- | --------------: | --------------: | -------------: |
+| A        | Battery |            1000 |              20 |              5 |
+| A        | Battery |             800 |              24 |              6 |
+| A        | Motor   |             500 |              30 |              7 |
+| B        | Battery |             900 |               9 |              4 |
+| B        | Motor   |             700 |              21 |              8 |
+For each supplier and part, calculate:
+total_units
+total_defects
+avg_lead_time
+defect_rate
+defect_rate = total_defects / total_units
+"""
+df = df.groupby(['supplier','part']).agg(total_units=("units_inspected","sum"),
+                                        total_defects = ("defective_units","sum"),
+                                        avg_lead_time = ("lead_time_days","mean")).reset_index()
+df['defect_rate'] = df['total_defects']/df['total_units'].replace(0,np.nan)
 
 
 
