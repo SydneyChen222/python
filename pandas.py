@@ -365,6 +365,24 @@ For each step, the question is the same: **do I need to dedupe/aggregate to a pa
 3. The **median student total tuition** across the whole dataset
 4. Each student's tuition as a **% of their school's total tuition**
 """
+df = enrollments.groupby('district',as_index = False).agg(total_tuition = ("tuition_paid","sum"))
+enrollments['district_tuition'] = enrollments.groupby('district')['tuition_paid'].transform('sum')
+enrollments['student_total'] = enrollments.groupby('student_if')['tuition_paid'].transform('sum')
+# Stage 1: each student's TOTAL (sum their courses)
+student_totals = enrollments.groupby(['district','student_id'], as_index=False).agg(
+    student_total=("tuition_paid","sum")
+)
+# Stage 2: average those student totals within district
+df2 = student_totals.groupby('district', as_index=False).agg(
+    avg_per_student=("student_total","mean")
+)
+student_totals = enrollments.groupby('student_id', as_index=False).agg(
+    student_total=("tuition_paid", "sum")
+)
+med = student_totals['student_total'].median()
+df3 = enrollments.groupby(['student_id','school'],as_index=False).agg(student_school_paid = ("tuition_paid","sum"))
+df3['school_total'] = df3.groupby('school')['student_school_paid'].transform('sum')
+df3['perc'] = df3['tuition_paid']/df3['school_total'].replace(0,np.nan)
 
 
 
