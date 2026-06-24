@@ -1,4 +1,31 @@
 """
+Given a non-negative integer x, return the integer square root of x.
+That means return the largest integer r such that r * r <= x.
+"""
+def mySqrt(x: int) -> int:
+    if x < 2:
+        return x
+
+    left, right = 1, x // 2
+    ans = 1
+
+    while left <= right:
+        mid = (left + right) // 2
+        square = mid * mid
+
+        if square == x:
+            return mid
+
+        elif square < x:
+            ans = mid          # mid is valid, but maybe there is a bigger valid answer
+            left = mid + 1
+
+        else:
+            right = mid - 1    # mid is too large
+
+    return ans
+
+"""
 The goal is to swap the id for each 2 department if the total department number is odd, and keep last department id not swapped
 | id | swapped_id | name    | swapped_name |
 | -- | ---------- | ------- | ------------ |
