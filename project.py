@@ -53,8 +53,33 @@ df = pd.merge(merchants,txns,on = 'merchant_id', how ='left')
 df = df.fillna(0)
 df['pct_of_merchant'] = (df['authorized_amount']/df['merchant_total'].replace(0,np.nan)).round(2)
 
+"""
+**Drill 5 — Pivot + rank within group**
+New frame. Daily processing volume by merchant and payment method:
+**Task — two parts:**
 
+**(a)** Build a summary table: total amount per `merchant` × `method`, 
+with methods as **columns** (one column `card`, one column `wallet`), merchants as rows. 
+Missing combos should be `0`, not NaN. This is the `pivot_table` move.
+**(b)** From the long (pre-pivot) per-merchant-per-method totals, add a column `rank_in_merchant`
+that ranks each method **within its merchant** by total amount, highest = rank 1. This is `groupby().rank()`
 
+Hints before you swing:
+- **(a)** `pivot_table(index=..., columns=..., values=..., aggfunc='sum', fill_value=0)`. Think about which arg each of merchant/method/amount maps to.
+- **(b)** First collapse to per-merchant-per-method totals (`groupby(['merchant','method'])['amount'].sum()`), *then* rank. 
+For rank direction, `rank(ascending=False)` puts the largest at 1. `method='dense'` vs default matters if there are ties — mention which you'd pick and why.
+"""
+import pandas as pd
+import numpy as np
+
+df = pd.DataFrame({
+    'merchant':      ['Acme','Acme','Acme','Globex','Globex','Globex','Initech','Initech'],
+    'method':        ['card','card','wallet','card','wallet','wallet','card','wallet'],
+    'txn_date':      ['2024-04-01','2024-04-01','2024-04-02',
+                      '2024-04-01','2024-04-01','2024-04-02',
+                      '2024-04-01','2024-04-02'],
+    'amount':        [200.0, 150.0, 300.0, 500.0, 100.0, 250.0, 80.0, 120.0],
+})
 
 
 
