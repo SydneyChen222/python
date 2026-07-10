@@ -65,7 +65,8 @@ Missing combos should be `0`, not NaN. This is the `pivot_table` move.
 that ranks each method **within its merchant** by total amount, highest = rank 1. This is `groupby().rank()`
 
 Hints before you swing:
-- **(a)** `pivot_table(index=..., columns=..., values=..., aggfunc='sum', fill_value=0)`. Think about which arg each of merchant/method/amount maps to.
+- **(a)** `pivot_table(index=..., columns=..., values=..., aggfunc='sum', fill_value=0)`. 
+Think about which arg each of merchant/method/amount maps to.
 - **(b)** First collapse to per-merchant-per-method totals (`groupby(['merchant','method'])['amount'].sum()`), *then* rank. 
 For rank direction, `rank(ascending=False)` puts the largest at 1. `method='dense'` vs default matters if there are ties — mention which you'd pick and why.
 """
@@ -81,8 +82,95 @@ df = pd.DataFrame({
     'amount':        [200.0, 150.0, 300.0, 500.0, 100.0, 250.0, 80.0, 120.0],
 })
 
+summary = df.pivot_table(index = "merchant", columns = "method", values = "amount",
+                        aggfunc = "sum",fill_value = 0).reset_index()
+totals = df.groupby(['merchant', 'method'], as_index=False)['amount'].sum()
+totals['rank'] = totals.groupby('merchant')['amount'].rank(method='dense', ascending=False)
+result = totals[totals['rank'] == 1]
 
 
+"""
+Resample to daily, fill gaps, 3-day rolling average**
+Transactions at irregular timestamps, with **missing days** 
+
+Note: **May 3 and May 5 have no transactions at all**, and there's a declined txn on May 2. Both deliberate.
+
+**Task:**
+1. Keep only authorized transactions.
+2. Produce a **daily** series of total authorized `amount`, covering **every day** from May 1 to May 6 — including May 3 and May 5, 
+which must show `0` (this is where resample earns its keep: it fills the calendar automatically, unlike a plain groupby).
+3. Add a **3-day rolling average** of daily amount (`roll_3d`), rounded to 2 decimals.
+
+"""
+import pandas as pd
+import numpy as np
+
+df = pd.DataFrame({
+    'txn_ts': ['2024-05-01 09:00', '2024-05-01 15:30', '2024-05-02 11:00',
+               '2024-05-04 10:00', '2024-05-04 14:00', '2024-05-04 18:00',
+               '2024-05-06 08:00'],
+    'amount': [100.0, 200.0, 150.0, 300.0, 100.0, 50.0, 400.0],
+    'status': ['authorized','authorized','declined',
+               'authorized','authorized','authorized','authorized'],
+})
+df = df[df['status']=='authorized']
+df['txn_ts'] = pd.to_datetime(df['txn_ts'])
+df['txn_ts'] = df['txn_ts'].dt.date
+df = df.groupby('txn_ts').agg(total_amount=('amount','sum')).reset_index()
+daily = pd.date_range(start = '2024-05-01',end = '2024-05-06',freq = 'D',name = 'txn_ts')
+daily = daily.to_frame(index=False)
+final_df = pd.merge(daily, df, on=['txn_ts'], how='left').fillna(0)
+final_df = final_df.sort_values(by='txn_ts')
+final_df['roll_3d'] = final_df['total_amount'].rolling(3,min_periods = 1).mean()
+final_df['roll_3d'] = final_df['roll_3d'].round(2)
+
+
+auth = df[df['status'] == 'authorized'].copy()
+auth['txn_ts'] = pd.to_datetime(auth['txn_ts'])
+daily = (
+    auth.set_index('txn_ts')
+        .resample('D')['amount'].sum()      # auto-fills May 3 & 5 with 0
+        .rename('total_amount')
+        .reset_index()
+)
+daily['roll_3d'] = daily['total_amount'].rolling(3, min_periods=1).mean().round(2)
+
+
+"""
+ Monthly revenue + month-over-month growth**
+
+Transactions spanning several months, irregular timestamps:
+Note: **March has no transactions at all**, and there's a declined txn in February. 
+Both deliberate — March is the resample test (it must appear as a month), the declined row is the filter test.
+**Task:**
+1. Authorized only.
+2. **Monthly** total authorized revenue, every month from Jan to May — **March must appear as `0`** (this is `resample('ME')`).
+3. Add `mom_growth` — month-over-month growth as a **percentage**: `(this month − last month) / last month × 100`, rounded to 2 decimals. 
+First month is NaN (no prior month).
+
+Hints before you swing:
+- MoM growth needs the **previous month's value on the same row** — that's `.shift(1)` (pandas cousin of SQL `LAG`).
+`prev = series.shift(1)`, then `(curr - prev) / prev × 100`.
+- Watch the March trap: March = 0, so **April's growth divides by... wait, no** — April's *previous* month is March = 0. `(april - 0) / 0` → division by zero. 
+How do you want to handle a MoM growth where the prior month was 0? Think about it — 
+there's no single "right" answer, but you should *make a choice and name it*. This is exactly the kind of edge case the skills interview probes.
+"""
+import pandas as pd
+import numpy as np
+
+df = pd.DataFrame({
+    'txn_ts': ['2024-01-05', '2024-01-20', '2024-02-03', '2024-02-15',
+               '2024-02-28', '2024-04-10', '2024-04-22', '2024-05-01'],
+    'amount': [1000.0, 500.0, 800.0, 1200.0, 300.0, 2000.0, 600.0, 900.0],
+    'status': ['authorized','authorized','authorized','declined',
+               'authorized','authorized','authorized','authorized'],
+})
+df = df[df['status']=='authorized']
+df['txn_ts'] = pd.to_datetime(df['txn_ts'])
+
+mtm = df.set_index('txn_ts').resample('MS')['amount'].sum().rename('monthly_amount').reset_index() #sorted 
+mtm['previous'] = mtm['monthly_amount'].shift(periods = 1) # since first month should be NaN
+mtm['mom_growth'] = ((mtm['monthly_amount'] - mtm['previous']) / mtm['previous'].replace(0,np.nan) * 100).round(2) #for March edge case, we would like to show NaN
 
 
 """
@@ -236,4 +324,65 @@ problem_ids = duplicate_latest[
 ambiguous_latest = latest_risk[
     latest_risk["transaction_id"].isin(problem_ids)
 ]
+
+"""
+### Task 1 — Clean the basic fields
+
+Using the `payments` dataframe, create these four columns:
+```text
+created_date
+week_start
+status_clean
+is_authorized
+
+Rules:
+
+* Convert `created_at` to datetime.
+* `created_date` should contain only the calendar date.
+* `week_start` should be the Monday of that week.
+* `status_clean` should be lowercase with extra spaces removed.
+* `is_authorized` should be a boolean column.
+
+Expected structure:
+
+"""
+import pandas as pd
+import numpy as np
+
+payments = pd.DataFrame({
+    "transaction_id": [1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1011,1012],
+    "merchant_id": ["M1","M1","M1","M1","M2","M2","M2","M2","M1","M1","M2","M2"],
+    "created_at": [
+        "2026-02-01 10:01", "2026-02-01 10:05", "2026-02-02 09:30",
+        "2026-02-03 12:20", "2026-02-03 15:00", "2026-02-04 16:10",
+        "2026-02-05 11:40", "2026-02-05 11:45", "2026-02-08 13:00",
+        "2026-02-08 13:05", "2026-02-09 14:30", "2026-02-10 17:20"
+    ],
+    "payment_reference": [
+        "US-CARD-VISA-2026", "us_wallet_applepay_2026", "CA-WALLET-PAYPAL-2026",
+        "UK-card-mastercard-2026", "DE_wallet_paypal_2026", "US-CARD-AMEX-2026",
+        "FR-WALLET-APPLEPAY-2026", None, "US_wallet_applepay_2026",
+        "US-WALLET-APPLEPAY-2026", "DE-card-visa-2026", "FR_wallet_paypal_2026"
+    ],
+    "status": [
+        "AUTHORIZED", "failed", "Failed", "authorized", "FAILED", "authorized",
+        "failed", "FAILED", "failed", "authorized", "failed", "FAILED"
+    ],
+    "amount": [100, 80, 120, 200, 150, 300, 90, 60, 110, 130, 70, 95],
+    "currency": ["USD","USD","CAD","GBP","EUR","USD","EUR","EUR","USD","USD","EUR","EUR"],
+    "error_message": [
+        None,
+        "CARD_DECLINED: insufficient_funds",
+        "timeout_gateway_adyen_us",
+        None,
+        "Fraud Blocked - risk_score=92",
+        None,
+        "TIMEOUT: gateway did not respond",
+        "issuer_unavailable",
+        "card declined - INSUFFICIENT FUNDS",
+        None,
+        "risk_rule_blocked",
+        "gateway timeout"
+    ]
+})
 
