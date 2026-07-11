@@ -243,7 +243,6 @@ df = df.groupby(['country','payment_method','failure_category']).agg(
 df['rank'] = df.groupby(['country','payment_method'])['trasaction_count'].rank(method = 'dense',ascending = False)
 result = df[df['rank']==1]
 """
-Exactly. That is the correct answer.
 
 > “I used `dense` ranking because the requirement says to keep all tied categories. If two failure categories have the same highest transaction count within a country and payment method, both receive rank 1 and are retained.”
 
@@ -329,7 +328,7 @@ ambiguous_latest = latest_risk[
 ### Task 1 — Clean the basic fields
 
 Using the `payments` dataframe, create these four columns:
-```text
+
 created_date
 week_start
 status_clean
@@ -385,4 +384,257 @@ payments = pd.DataFrame({
         "gateway timeout"
     ]
 })
+payments['created_at'] = pd.to_datetime(payments['created_at'])
+payments['create_date'] = payments['created_at'].dt.date
+payments['week_start'] = payments['created_at'].dt.to_period('W').dt.to_timestamp(how="start") # we have to use timestamp to get to_period and need to convert back to timestamp from period to get the week start date
+payments['status_clean'] = payments['status'].str.strip().str.lower()
+payments['is_authorized'] = payments['status_clean']=='authorized'
+"""what if the status is not clean but shows as below:
+AUTHORIZED
+AUTHORIZED_SUCCESS
+PARTIALLY_AUTHORIZED
+then we need to align the business rules first
+
+The business says:
+"Different merchants send us payment references in different formats. We need to standardize them."
+Create four columns
+country
+payment_type
+provider
+year
+| payment_reference       | country | payment_type | provider | year |
+| ----------------------- | ------- | ------------ | -------- | ---- |
+| US-CARD-VISA-2026       | US      | card         | visa     | 2026 |
+| uk_wallet_applepay_2026 | UK      | wallet       | applepay | 2026 |
+| ...                     |         |              |          |      |
+For NULL
+country = unknown
+payment_type = unknown
+provider = unknown
+year = NaN
+Try without using .apply().
+Use pandas string methods.
+"""
+payments = pd.DataFrame({
+    "transaction_id":[
+        1,2,3,4,5,6,7,8,9,10
+    ],
+    "payment_reference":[
+        "US-CARD-VISA-2026",
+        "uk_wallet_applepay_2026",
+        "CA-CARD-MASTERCARD-2025",
+        "DE_wallet_paypal_2026",
+        "US-CARD-AMEX-2026",
+        None,
+        "  fr-wallet-paypal-2026 ",
+        "UK_CARD_VISA_2026",
+        "DE-card-mastercard-2026",
+        "US__wallet__applepay__2026"
+    ]
+})
+payments['payment_reference'] = payments['payment_reference'].str.strip()
+payments['payment_reference'] = payments['payment_reference'].str.replace(r"[_-+]", "-", regex=True)
+# we need to standardize the - and _ also there are multiple _ or - also need to standardized, so we need to use r"-+" for multiplt - and _
+payments['country'] = payments['payment_reference'].str.upper().str.split("-").str[0].fillna("unknown")
+payments['payment_type'] = payments['payment_reference'].str.lower().str.split("-").str[1].fillna("unknown")
+payments['provider'] = payments['payment_reference'].str.lower().str.split("-").str[2].fillna("unknown")
+payments['year'] = payments['payment_reference'].str.split("-").str[3].fillna(np.nan)
+# Use .split() if your data is cleanly separated by a specific character (like a hyphen or comma). Use .extract() if your data is messy, lacks a uniform delimiter, or requires complex pattern matching
+
+######better solution #############
+#######because missing values are already null, and the year may otherwise remain a string. errors="coerce" also safely converts invalid years to NaN.
+payments["component_count"] = (
+    payments["payment_reference_clean"]
+    .str.split("-")
+    .str.len()
+)
+payments["is_valid_reference"] = payments["component_count"] == 4
+### we need to check the data structure and see to validate the number of components
+parts = payments["payment_reference_clean"].str.split("-", expand=True)
+payments["country"] = parts[0].str.upper().fillna("unknown")
+payments["payment_type"] = parts[1].str.lower().fillna("unknown")
+payments["provider"] = parts[2].str.lower().fillna("unknown")
+payments["year"] = pd.to_numeric(parts[3], errors="coerce")
+
+
+"""
+## Task 3 — Failure classification
+Using the same `payments` dataframe, create a new column:
+failure_category
+Rules:
+
+if is_authorized is True
+→ "authorized"
+else if error_message is null
+→ "unknown"
+else if error_message contains "insufficient" or "declined"
+→ "insufficient_funds"
+else if error_message contains "fraud" or "risk"
+→ "fraud_risk"
+else if error_message contains "timeout" or "gateway"
+→ "technical"
+
+else if error_message contains "issuer"
+→ "issuer"
+else
+→ "other"
+Important:
+
+* Use vectorized logic.
+* Condition order matters.
+* Keep authorized transactions as `"authorized"` even if `error_message` contains text.
+"""
+condtions = [payments['is_authorized']==True,
+             payments['error_message'].isna(),
+             ((payments['error_message'].str.contains('insufficient',  case=False,
+    na=False)) | (payments['error_message'].str.contains('declined',  case=False,
+    na=False))),
+             ((payments['error_message'].str.contains('fraud',  case=False,
+    na=False)) | (payments['error_message'].str.contains('risk',  case=False,
+    na=False))),
+             ((payments['error_message'].str.contains('timeout',  case=False,
+    na=False)) | (payments['error_message'].str.contains('gateway',  case=False,
+    na=False))),
+             (payments['error_message'].str.contains('issuer',  case=False,
+    na=False))
+]
+choices = ['authorized','unknown','insufficient_funds','fraud_risk','technical','issuer']
+payments['failure_category'] = np.select(conditions,choices,default = 'other')
+
+
+"""
+we don't care about keywords anymore."
+Instead, they send you this lookup table
+Marketing changes these mappings every week
+would you redesign your solution?
+If the mapping changes frequently, I would avoid hardcoding it in Python because every business change would require a code deployment and additional testing.
+
+Instead, I would ask the business to maintain the mapping in a reference table or configuration file. 
+My pipeline would load the mapping dynamically so that future updates only require changing the reference table rather than modifying application code.
+Because the relationship is based on substring matching rather than an equality key, I wouldn't use a simple merge. 
+Instead, I'd drive the matching logic from the reference table so that business users can update mappings without requiring code changes
+"""
+failure_mapping = pd.DataFrame({
+
+"pattern":[
+"insufficient",
+"declined",
+"fraud",
+"risk",
+"timeout",
+"gateway",
+"issuer"
+],
+
+"failure_category":[
+"insufficient_funds",
+"insufficient_funds",
+"fraud_risk",
+"fraud_risk",
+"technical",
+"technical",
+"issuer"
+]
+})
+mapping = {
+    "insufficient": "insufficient_funds",
+    "declined": "insufficient_funds",
+    "fraud": "fraud_risk",
+    "risk": "fraud_risk",
+    ...
+}
+conditions = []
+choices = []
+
+for pattern, category in mapping.items():
+    conditions.append(
+        payments["error_message"].str.contains(
+            pattern,
+            case=False,
+            na=False
+        )
+    )
+    choices.append(category)
+
+
+
+"""
+# Task 4 — Weekly Merchant KPI
+> "Build a weekly KPI table that will feed our dashboard."
+You already have these columns:
+week_start
+merchant_id
+payment_type
+is_authorized
+amount
+
+Build the following output:
+| week_start | merchant_id | payment_type | attempted_transactions | authorized_transactions | authorization_rate | attempted_amount | authorized_amount |
+| ---------- | ----------- | ------------ | ---------------------- | ----------------------- | ------------------ | ---------------- | ----------------- |
+
+Rules:
+* attempted_transactions = number of transactions
+* authorized_transactions = number of authorized transactions
+* authorization_rate = authorized_transactions / attempted_transactions
+* attempted_amount = total amount
+* authorized_amount = sum(amount) where authorized
+
+### Interview twist
+You **cannot** use `.apply()`.
+Try to solve it using one `groupby().agg()`.
+"""
+attempted = df.groupby(['week_start','merchant_id','payment_type']).agg(attempted_transaction = ('amount','size'),attempted_amount = ('amount','sum')).reset_index()
+authorized = df[df['is_authorized'] == True]
+authorized = authorized.groupby(['week_start','merchant_id','payment_type']).agg(authorized_transactions = ('amount','size'), authorized_amount = ('amount','sum')).reset_index()
+result = attempted.merge(authorized, on = ['week_start','merchant_id','payment_type'],how = 'left')
+result[["authorized_transactions", "authorized_amount"]] = (
+    result[["authorized_transactions", "authorized_amount"]]
+    .fillna(0)
+)
+result['authorization_rate'] = result['authorized_transactions'].replace(0,np.nan) / result['attempted_transactions'].replace(0,np.nan)
+###########
+df['authorized_amount'] = df['amount'].where(df['is_authorized'],0)
+result = df.groupby(['week_start','merchant_id','payment_type']).agg(
+    attempted_transaction = ('amount','size'),
+    attempted_amount = ('amount','sum'),
+    authorized_transactions = ('is_authorized','sum'),
+    authorized_amount = ('authorized_amount','sum')
+).reset_index()
+result['authorization_rate'] = result['authorized_transactions'] / result['attempted_transactions'].replace(0,np.nan)
+"""
+## Task 5 — Top failure category by week and payment type
+Using the same `payments` dataframe, keep only failed transactions and return the top failure category for each:
+
+week_start
+payment_type
+
+Output:
+week_start
+payment_type
+failure_category
+transaction_count
+rank
+
+Rules:
+* Exclude authorized transactions.
+* Count transactions by `week_start`, `payment_type`, and `failure_category`.
+* Rank categories within each `week_start + payment_type`.
+* Keep all tied categories at rank 1.
+* Use pandas only.
+"""
+failure = payments[payments['status_clean']!='authorized']
+failure = failure.groupby(['week_start','payment_type','failure_category']).agg(transaction_count=('transaction_id','size')).reset_index()
+failure['rank'] = failure.groupby(['week_start','payment_type'])['transaction_count'].rank(method='dense',ascending = False)
+result = failure[failure['rank']==1]
+
+
+
+
+
+
+
+
+
+
+
 
