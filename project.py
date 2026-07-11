@@ -627,13 +627,139 @@ failure = failure.groupby(['week_start','payment_type','failure_category']).agg(
 failure['rank'] = failure.groupby(['week_start','payment_type'])['transaction_count'].rank(method='dense',ascending = False)
 result = failure[failure['rank']==1]
 
+"""
+Rolling Authorization Rate
+"Our dashboard currently shows daily authorization rate.
+We think it is too noisy.
+Please calculate a rolling 3-day authorization rate.
+| created_date | payment_type | attempted_transactions | authorized_transactions |
+| ------------ | ------------ | ---------------------- | ----------------------- |
 
+For each payment_type calculate
 
+rolling_attempted_transactions
+rolling_authorized_transactions
+rolling_authorization_rate
 
+where
+rolling_authorization_rate
+=
+rolling_authorized_transactions
+/
+rolling_attempted_transactions
 
+expected output:
+| created_date | payment_type | attempted_transactions | authorized_transactions | rolling_attempted_transactions | rolling_authorized_transactions | rolling_authorization_rate |
+| ------------ | ------------ | ---------------------: | ----------------------: | -----------------------------: | ------------------------------: | -------------------------: |
 
+"""
+df = payments.groupby(['created_date','payment_type']).agg(
+    attempted_transactions=('transaction_id','size'),
+    authorized_transactions=('is_authorized','sum')
+).reset_index()
+df = df.sort_values(by=['payment_type','created_date'])
+df['rolling_attempted_transactions'] = df.groupby('payment_type')['attempted_transactions'].transform(lambda x: x.rolling(3,min_periods = 1).sum())
+df['rolling_authorized_transactions'] = df.groupby('payment_type')['authorized_transactions'].transform(lambda x: x.rolling(3,min_periods = 1).sum())
+df['rolling_authorization_rate'] = df['rolling_authorized_transactions'] / df['rolling_attempted_transactions'].replace(0,np.nan)
 
+"""
+A merchant says:
 
+"Our wallet authorization rate suddenly dropped this week."
+You receive two dataframes.
+transactions
+"""
+transactions = pd.DataFrame({
+    "transaction_id":[1,2,3,4,5,6,7,8],
+    "merchant_id":["M1","M1","M1","M1","M1","M2","M2","M2"],
+    "payment_method":[
+        "Wallet",
+        "wallet",
+        "WALLET",
+        "Card",
+        "card",
+        "wallet",
+        "Wallet",
+        "Card"
+    ],
+    "country":[
+        "US ",
+        "us",
+        "US",
+        "CA",
+        "CA ",
+        "DE",
+        " DE",
+        "DE"
+    ],
+    "created_at":[
+        "2026-02-01",
+        "2026-02-01",
+        "2026-02-02",
+        "2026-02-02",
+        "2026-02-03",
+        "2026-02-03",
+        "2026-02-04",
+        "2026-02-04"
+    ],
+    "amount":[100,80,120,150,180,130,140,200]
+})
+payment_events = pd.DataFrame({
+    "transaction_id":[
+        1,2,2,3,4,5,6,7,7,8
+    ],
+    "event_time":[
+        "2026-02-01 10:00",
+        "2026-02-01 11:00",
+        "2026-02-01 11:05",
+        "2026-02-02 09:00",
+        "2026-02-02 13:00",
+        "2026-02-03 09:00",
+        "2026-02-03 11:00",
+        "2026-02-04 10:00",
+        "2026-02-04 10:05",
+        "2026-02-04 12:00"
+    ],
+    "status":[
+        "authorized",
+        "failed",
+        "authorized",
+        "failed",
+        "authorized",
+        "authorized",
+        "failed",
+        "failed",
+        "failed",
+        "authorized"
+    ]
+})
+###Part A clean
+transactions['payment_method'] = transactions['payment_method'].str.lower(),str.strip()
+transactions['country'] = transactions['country'].str.upper().str.strip()
+###Part B -- Find the latest status of every transaction.
+payment_events["event_time"] = pd.to_datetime(
+    payment_events["event_time"]
+)
+payment_events = payments_events.sort_values(by=['transaction_id','event_time'])
+latest = payment_events.drop_duplicates(subset=['transaction_id'], keep="last")
+###Part C  Merge into transactions.
+df = pd.merge(transactions,latest,on='transaction_id',how ='left',validate="one_to_one")
+###Part D   Build
+#|country|payment_method|attempted|authorized|authorization_rate|
+df['is_authorized'] = df['status'] == 'authorized'
+df = df.groupby(['country','payment_method'],as_index = False).agg(
+    attempted = ('transaction_id','size'),
+    authorized = ('is_authorized','sum')
+)
+df['authorization_rate'] = df['authorized'] / df['attempted'].replace(0,np.nan)
+
+"""Part E
+Business asks:
+"Which segment should we investigate first?"
+Return
+|country|payment_method|authorization_rate|
+"""
+result = df.sort_values(['authorization_rate']).head(1)
 
 
 
