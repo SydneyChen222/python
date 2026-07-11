@@ -743,7 +743,7 @@ payment_events["event_time"] = pd.to_datetime(
 payment_events = payments_events.sort_values(by=['transaction_id','event_time'])
 latest = payment_events.drop_duplicates(subset=['transaction_id'], keep="last")
 ###Part C  Merge into transactions.
-df = pd.merge(transactions,latest,on='transaction_id',how ='left',validate="one_to_one")
+df = pd.merge(transactions,latest,on='transaction_id',how ='left',validate="one_to_one")  #Before merging, verify that the relationship between these two tables matches my expectation. If not, raise an error instead of silently producing bad data.
 ###Part D   Build
 #|country|payment_method|attempted|authorized|authorization_rate|
 df['is_authorized'] = df['status'] == 'authorized'
@@ -762,5 +762,77 @@ Return
 result = df.sort_values(['authorization_rate']).head(1)
 
 
+"""
+Clean payment_info.
+Requirements:
+mixed case
+"Apple Pay" / "ApplePay" / "APPLE PAY" should become
+apple_pay
+"Master Card" and "MasterCard" should become
+mastercard
+None>>unknown
 
+Create:
+country
+payment_method
+device
+"""
+import pandas as pd
+payments = pd.DataFrame({
+"transaction_id":[
+1001,1002,1003,1004,1005,
+1006,1007,1008,1009,1010,
+1011,1012
+],
+"merchant":[
+"M1","M1","M1","M1","M1","M2","M2","M2","M2","M2","M2","M1"
+],
+"created_at":[
+"2026-02-01","2026-02-01",
+"2026-02-02","2026-02-03","2026-02-03","2026-02-04","2026-02-05",
+"2026-02-05","2026-02-06","2026-02-07","2026-02-07","2026-02-08"
+],
+
+"payment_info":[
+"US|Apple Pay|iOS",
+"US|apple pay|IOS",
+"US|Visa|Card",
+"CA|ApplePay|IOS",
+"CA|MasterCard|Card",
+"DE|APPLE PAY|Android",
+"DE|Visa|Card",
+"DE|Master Card|Card",
+"US|ApplePay|Android",
+"US|Visa|Card",
+None,"US|Apple Pay|IOS"
+],
+"status":[
+"AUTHORIZED","FAILED","AUTHORIZED","FAILED","AUTHORIZED","FAILED","AUTHORIZED",
+"AUTHORIZED","FAILED","AUTHORIZED","FAILED","AUTHORIZED"
+],
+"amount":[
+100,80,120,90,200,130,180,140,60,210,75,160]})
+#"I used regex because the input has inconsistent formatting. The same logical value appears with different capitalization and spacing, such as Apple Pay, ApplePay, and APPLE PAY. A regex with an optional whitespace pattern allows me to normalize all variants using one rule instead of maintaining multiple replacement statements. That makes the solution easier to extend if more formatting variations appear
+payments[[ 'country', 'payment_method', 'device']] = payments["payment_info"].str.split("|", expand=True)
+payments['payment_method'] = payments['payment_method'].str.strip().str.lower()
+payments['payment_method'] = payments['payment_method'].str.replace(r"(?i)apple\s*pay", "apple_pay", regex=True)
+payments['payment_method'] = payments['payment_method'].str.replace(r"(?i)master\s*card", "mastercard", regex=True)
+payments['payment_method'] = payments['payment_method'].fillna('unknown')
+payments['device'] = payments['device'].str.strip().str.replace(r"(?i)ios", "iOS", regex=True)
+payments['device'] = payments['device'].str.strip().str.replace(r"(?i)android", "Android", regex=True)
+payments['device'] = payments['device'].str.strip().str.replace(r"(?i)card", "Card", regex=True)
+payments['device'] = payments['device'].fillna('unknown')
+payments['country'] = payments['country'].str.strip().str.upper()
+
+"""calculate the Apple Pay authorization rate by country."
+Requirements:
+Output:
+
+country	attempted_transactions	authorized_transactions	authorization_rate
+
+Rules:
+Use only payment_method == "apple_pay".
+Use the cleaned columns from Question 1.
+Return the countries sorted by lowest authorization rate first.
+payments['country'] = payments['country'].fillna('unknown')"""
 
