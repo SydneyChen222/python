@@ -823,11 +823,11 @@ payments['device'] = payments['device'].str.strip().str.replace(r"(?i)android", 
 payments['device'] = payments['device'].str.strip().str.replace(r"(?i)card", "Card", regex=True)
 payments['device'] = payments['device'].fillna('unknown')
 payments['country'] = payments['country'].str.strip().str.upper()
+payments['country'] = payments['country'].fillna('unknown')
 
 """calculate the Apple Pay authorization rate by country."
 Requirements:
 Output:
-
 country	attempted_transactions	authorized_transactions	authorization_rate
 
 Rules:
@@ -835,4 +835,50 @@ Use only payment_method == "apple_pay".
 Use the cleaned columns from Question 1.
 Return the countries sorted by lowest authorization rate first.
 payments['country'] = payments['country'].fillna('unknown')"""
+
+df = payments[payments['payment_method']=='apple_pay']
+df['is_authorized'] = df['status'] == 'AUTHORIZED'
+df = df.groupby('country').agg(attempted_transactions=('transaction_id','size'), 
+                               authorized_transactions = ('is_authorized','sum')).reset_index()
+df['authorization_rate'] = df['authorized_transactions']/df['attempted_transactions'].replace(0,np.nan)
+df['rank'] = df['authorization_rate'].rank(method = 'dense') #we need lowest so we need ascending
+re = df[df['rank']==1]
+#The summary tells me where the problem appears, but not why. I would first verify that the sample size is meaningful, because a country with only a handful of transactions can have a very volatile authorization rate. Then I'd segment further by merchant, device, issuer, time period, and failure reason to determine whether the issue is widespread or concentrated in one subset. I would avoid concluding that Apple Pay itself is broken based on one aggregated metric.
+
+
+"""
+The merchant emails you:
+"Your dashboard shows an authorization rate of 78% for Apple Pay in the US.
+Our internal dashboard shows 91%.
+We think your dashboard is wrong."
+dashboard:
+Numerator:
+Final status == Authorized
+Denominator:
+Unique transaction_id
+Month:
+created_at
+
+merchant:
+Numerator:
+Successful payment attempts
+Denominator:
+Payment attempts
+Month:
+final event_time
+
+Write Python code that helps investigate how much each methodology difference contributes to the discrepancy.
+"""
+#Rather than trying to immediately reproduce the merchant's 91%, I would isolate one methodology difference at a time. I would start with the current dashboard logic as the baseline, then create separate comparison datasets where I change only one assumption—for example, using event_time instead of created_at, counting payment attempts instead of unique transactions, or using successful attempts instead of the latest transaction status. 
+#After each change, I would compare the authorized count, attempted count, and authorization rate with the baseline. 
+#This allows me to quantify how much each methodological difference contributes to the discrepancy before deciding whether there is an actual data quality issue.
+
+
+
+
+
+
+
+
+
 
