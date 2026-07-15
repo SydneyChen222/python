@@ -1,3 +1,56 @@
+tickets = [
+    {"id": 101, "team": "Design",  "hours": 5,  "status": "closed"},
+    {"id": 102, "team": "Billing", "hours": 12, "status": "open"},
+    {"id": 103, "team": "Design",  "hours": 3,  "status": "open"},
+    {"id": 104, "team": "Billing", "hours": 8,  "status": "closed"},
+    {"id": 105, "team": "Infra",   "hours": 20, "status": "open"},
+    {"id": 106, "team": "Design",  "hours": 2,  "status": "closed"},
+]
+#Total hours for tickets that are "open"
+def total_hour(rows):
+    total = 0
+    for t in rows:
+        if t['status'] == 'open':
+            total = total + t['hours']
+    return total
+#Count by group. How many tickets per team, as a dict. (Answer: {'Design': 3, 'Billing': 2, 'Infra': 1})
+def count_by_group(rows):
+    count = {}
+    for t in rows:
+        team = t['team']
+        count[team] = count.get(team,0) + 1
+    return count
+# Sum by group. Total hours per team, as a dict. (Answer: {'Design': 10, 'Billing': 20, 'Infra': 20})
+def sum_by_group(rows):
+    result = {}
+    for t in rows:
+        team = t['team']
+        hours = t['hours']
+        result[team] = result.get(team,0) + hours
+    return result
+
+#or 
+def sum_by_group(rows):
+    result = {}
+    for t in rows:
+        team = t['team']
+        result[team] = result.get(team,0) + t['hours']
+    return result
+#Collect a list. The ids of tickets with at least 8 hours. (Answer: [102, 104, 105]) Read that boundary carefully.
+def list_id(rows):
+    result = []
+    for t in rows:
+        if t['hours'] >= 8:
+            result.append(t['id'])
+    return result
+#The twist: percentage. What percent of tickets are "closed"? (Answer: 50.0) Shape: count the closed ones, divide by total, times 100. 
+def percentage(rows):
+    perc = 0
+    for t in rows:
+        if t['status'] == 'closed':
+            perc = perc + 1
+    return 100*perc/len(rows)
+
 """ given a list of transactions write a function to return 
 transactions = [
     ("Alice", 120),
@@ -17,7 +70,7 @@ def total_spending(transactions):
   result = {}
   for letter, number in transactions:
      result[letter] = result.get(letter, 0) + number
-  return(dict(grouped))
+  return(dict(result))
 from collections import Counter, defaultdict
 import random, statistics
 text = "apple pie"
