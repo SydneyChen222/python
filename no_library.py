@@ -285,12 +285,91 @@ def revenue_per_customer(rows):
  
 print("3. per customer:", revenue_per_customer(orders))
 
-signups = [
-    {"user": "a1", "plan": "Pro",        "region": "US", "mrr": 15},
-    {"user": "a2", "plan": "Free",       "region": "EU", "mrr": 0},
-    {"user": "a3", "plan": "Pro",        "region": "US", "mrr": 15},
-    {"user": "a4", "plan": "Enterprise", "region": "APAC","mrr": 200},
-    {"user": "a5", "plan": "Free",       "region": "US", "mrr": 0},
-    {"user": "a6", "plan": "Enterprise", "region": "EU", "mrr": 200},
+events = [
+    {"user_id": 1, "event": "file_created"},
+    {"user_id": 1, "event": "file_shared"},
+    {"user_id": 1, "event": "file_shared"},
+    {"user_id": 2, "event": "file_created"},
+    {"user_id": 3, "event": "file_shared"},
+    {"user_id": 2, "event": "comment_added"},
 ]
+#return the number of unique users who performed each event.
 
+from collections import defaultdict
+def count_unique_users_by_event(events):
+    result = {}
+    unique_values = defaultdict(set)
+    for t in events:
+      unique_values[t['event']].add(t['user_id'])
+    result = {event: len(user_id) for event, user_id in unique_values.items()}  
+    return result
+count_unique_users_by_event(events)
+{
+    "file_created": 2,
+    "file_shared": 2,
+    "comment_added": 1
+}
+#return
+{
+    "file_created":{
+        "unique_users":2,
+        "total_events":2
+    },
+    "file_shared":{
+        "unique_users":2,
+        "total_events":3
+    },
+    "comment_added":{
+        "unique_users":1,
+        "total_events":1
+    }
+}
+def count_unique_users_by_event(events):
+    result = {}
+    unique_values = defaultdict(set)
+    total_counts = defaultdict(int)
+    for t in events:
+        event = t['event']
+        id = t['user_id']
+        unique_values[t['event']].add(t['user_id'])
+        total_counts[event] += 1
+    result = {event: {
+        'unique_user': len(user_id),
+        'total': total_counts[event]
+    }
+    for event, user_id in unique_values.items()
+} 
+    return result
+count_unique_users_by_event(events)
+
+#return group by (user_id,event)
+{
+    (1, "file_created"): 1,
+    (1, "file_shared"): 2,
+    (2, "file_created"): 1,
+    (2, "comment_added"): 1,
+    (3, "file_shared"): 1
+}
+def count_unique_users_by_event(events):
+    result = {}
+    unique_values = defaultdict(set)
+    for row in events:
+        key = (row["user_id"], row["event"])
+        result[key] = result.get(key, 0) + 1
+    return result
+
+#return sorted by count descending event ascending
+[
+    ("file_shared",2),
+    ("file_created",2),
+    ("comment_added",1)
+]
+def count_unique_users_by_event(events):
+    result = []
+    unique_values = defaultdict(set)
+    for t in events:
+      unique_values[t['event']].add(t['user_id'])
+    result = [(event, len(user_id)) for event, user_id in unique_values.items()]  
+    result = sorted(result, key=lambda x: (-x[1], x[0]))
+    return result
+count_unique_users_by_event(events)
