@@ -874,11 +874,65 @@ Write Python code that helps investigate how much each methodology difference co
 #This allows me to quantify how much each methodological difference contributes to the discrepancy before deciding whether there is an actual data quality issue.
 
 
-
-
-
-
-
-
-
-
+"""
+***This is a group-by-then-rank. (Target: f1→edit, f2→edit, f3 is a tie between comment and view — tell me how you'd break it.)
+"""
+import pandas as pd
+events = pd.DataFrame([
+    {"event_id":1,"user_id":"u1","action":"edit","file_id":"f1","seconds":40},
+    {"event_id":2,"user_id":"u2","action":"view","file_id":"f1","seconds":10},
+    {"event_id":3,"user_id":"u1","action":"edit","file_id":"f2","seconds":120},
+    {"event_id":4,"user_id":"u3","action":"edit","file_id":"f1","seconds":25},
+    {"event_id":5,"user_id":"u2","action":"comment","file_id":"f3","seconds":15},
+    {"event_id":6,"user_id":"u1","action":"view","file_id":"f3","seconds":5},
+    {"event_id":7,"user_id":"u3","action":"edit","file_id":"f2","seconds":60},
+])
+users = pd.DataFrame([
+    {"user_id":"u1","team":"Design","plan":"pro"},
+    {"user_id":"u2","team":"Design","plan":"free"},
+    {"user_id":"u3","team":"Eng","plan":"pro"},
+])
+#1**Part 1 — filter + aggregate.** Total `seconds` spent on **edit** actions, per `user_id`. (Target: u1=160, u3=85.)
+df1 = events[events['action']=='edit'].groupby('user_id').agg(total_sec = ('seconds','sum')).reset_index()
+#2**Part 2 — the mapping wrinkle.** Total **edit** seconds per **team**. This needs the join — `team` lives in `users`, not `events`. (Target: Design=160, Eng=85.)
+df2 = pd.merge(events,users,on ='user_id',how = 'left')
+df2 = df2[df2['action']=='edit'].groupby('team').agg(total_sec = ('seconds','sum')).reset_index()
+#3**Part 3 — distinct count.** How many **distinct files** did each user touch (any action)? (Target: u1=3, u2=2, u3=2.)
+df3 = events.groupby('user_id').agg(distinct_files=('file_id','nunique')).reset_index()
+#4**Part 4 — the follow-up they'd actually ask.** Return, per file, which **action** happened most on it — i.e. the most frequent action per `file_id`. 
+df4 = events.groupby(['file_id','action']).agg(action_time = ('event_id','count')).reset_index()
+df4['rank'] = df4.groupby('file_id')['action_time'].rank(method = 'dense',ascending = False)
+df4 = df4[df4['rank']==1]
+"""
+**Part 1 — the rate (watch the denominator).** What's the overall **payment success rate** — successful payments ÷ all payment attempts? (Target: 6 success / 8 total = 0.75.)
+**Part 2 — success rate *per account*.** Same idea, grouped by `account_id`.
+**Part 3 — total collected revenue per month.** Sum of `amount` for **successful** payments only, by month of `ts`. (Remember: convert `ts`, then `.dt.to_period('M')`.) 
+**Part 4 — the wrinkle.** For each account, find the `amount` of their **most recent successful** payment. (Target: a1 → 100 (Feb 3), a2 → 500 (Feb 12), a3 → 250 (Feb 20).) 
+"""
+payments = pd.DataFrame([
+    {"pay_id":1,"account_id":"a1","amount":100,"status":"success","ts":"2026-01-03"},
+    {"pay_id":2,"account_id":"a1","amount":100,"status":"success","ts":"2026-02-03"},
+    {"pay_id":3,"account_id":"a2","amount":500,"status":"failed", "ts":"2026-01-10"},
+    {"pay_id":4,"account_id":"a2","amount":500,"status":"success","ts":"2026-01-12"},
+    {"pay_id":5,"account_id":"a3","amount":250,"status":"success","ts":"2026-01-20"},
+    {"pay_id":6,"account_id":"a1","amount":100,"status":"failed", "ts":"2026-03-03"},
+    {"pay_id":7,"account_id":"a3","amount":250,"status":"success","ts":"2026-02-20"},
+    {"pay_id":8,"account_id":"a2","amount":500,"status":"success","ts":"2026-02-12"},
+])
+#1 payment success rate
+total = payments['pay_id'].count()
+rate = payments[payments['status']=='success']['pay_id'].count() / total if total else np.nan
+#2
+payments['is_success'] = payments['status'] == 'success' 
+df = payments.groupby('account_id').agg(success = ('is_success','sum'),total=('pay_id','count')).reset_index()
+df['success_rate'] = df['success']/df['total'].replace(0,np.nan)
+df = payments.groupby('account_id')['is_success'].mean().reset_index(name='success_rate')
+#3
+payments['ts'] = pd.to_datetime(payments['ts'])
+payments['month'] = payments['ts'].dt.to_period('M')
+df = payments[payments['status']=='success']
+df = df.groupby('month').agg(success_amount = ('amount','sum')).reset_index()
+#4
+df = payments[payments['status']=='success']
+df['rank'] = df.groupby('account_id')['ts'].rank(method = 'first',ascending = False)
+result = df[df['rank']==1]
