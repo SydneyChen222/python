@@ -936,3 +936,119 @@ df = df.groupby('month').agg(success_amount = ('amount','sum')).reset_index()
 df = payments[payments['status']=='success']
 df['rank'] = df.groupby('account_id')['ts'].rank(method = 'first',ascending = False)
 result = df[df['rank']==1]
+"""
+users
+| user_id | registration_date |
+| ------- | ----------------- |
+| 1       | 2026-01-01        |
+| 2       | 2026-06-20        |
+| 3       | 2026-07-01        |
+events
+| user_id | event_type | event_time          |
+| ------- | ---------- | ------------------- |
+| 1       | search     | 2026-07-10 10:00:00 |
+| 1       | click      | 2026-07-10 10:00:12 |
+| 2       | search     | 2026-07-10 11:00:00 |
+| 2       | click      | 2026-07-10 11:01:00 |
+| 3       | search     | 2026-07-10 12:00:00 |
+
+A search is considered successful if the first click after that search happens within 30 seconds.
+Assume the latest date in the dataset is 2026-07-10.
+A new user registered within the last 30 days.
+An existing user registered earlier.
+
+Tasks
+Classify each user as new or existing.
+
+Compute
+total searches
+successful searches
+success rate
+for each segment.
+"""
+import pandas as pd
+import numpy as np
+
+# 1. Classify users
+df = users.copy()
+
+df['registration_date'] = pd.to_datetime(df['registration_date'])
+
+cutoff = pd.to_datetime('2026-07-10') - pd.Timedelta(days=30)
+
+df['segment'] = np.where(
+    df['registration_date'] >= cutoff,
+    'new user',
+    'existing user'
+)
+
+# 2. Prepare events
+events_copy = events.copy()
+events_copy['event_time'] = pd.to_datetime(events_copy['event_time'])
+
+searches = (
+    events_copy[events_copy['event_type'] == 'search']
+    .sort_values(['user_id', 'event_time'])
+    .rename(columns={'event_time': 'search_time'})
+)
+clicks = (
+    events_copy[events_copy['event_type'] == 'click']
+    .sort_values(['user_id', 'event_time'])
+    .rename(columns={'event_time': 'click_time'})
+)
+# f clicks must be uniquely attributed, I would instead map each click backward to the most recent search and ensure one-to-one attribution.
+matched_clicks = pd.merge_asof(
+    clicks.sort_values('click_time'),
+    searches.sort_values('search_time'),
+    by='user_id',
+    left_on='click_time',
+    right_on='search_time',
+    direction='backward',
+    tolerance=pd.Timedelta(seconds=30)
+)
+
+matched['time_difference'] = (
+    matched['click_time'] - matched['search_time']
+).dt.total_seconds()
+
+matched['successful'] = (
+    matched['time_difference'].between(0, 30)
+)
+matched = matched.merge(
+    df[['user_id', 'segment']],
+    on='user_id',
+    how='left'
+)
+result = (
+    matched.groupby('segment')
+    .agg(
+        total_searches=('search_time', 'size'),
+        successful_searches=('successful', 'sum')
+    )
+    .reset_index()
+)
+result['success_rate'] = (
+    result['successful_searches'] / result['total_searches']
+)
+print(result)
+
+
+status_log = pd.DataFrame({
+    'page_id': [1, 1, 2, 2, 3],
+    'status': ['on', 'off', 'off', 'on', 'on'],
+    'changed_at': [
+        '2026-07-01 09:00:00',
+        '2026-07-02 10:00:00',
+        '2026-07-01 08:00:00',
+        '2026-07-03 12:00:00',
+        '2026-07-02 15:00:00'
+    ]
+})
+#Find how many pages are currently active, based on the latest status for each page.
+status_log['changed_at'] = pd.to_datetime(status_log['changed_at'])
+df_sorted = status_log.sort_values('changed_at')
+final_df = df_sorted.drop_duplicates(subset=['page_id'], keep='last')
+active = final_df[final_df['status'] == 'on']['page_id'].count()
+#A new session starts after 30 minutes of inactivity. Return user_id, session_id, and events_in_session.
+
+
