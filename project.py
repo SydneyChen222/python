@@ -971,21 +971,16 @@ import numpy as np
 
 # 1. Classify users
 df = users.copy()
-
 df['registration_date'] = pd.to_datetime(df['registration_date'])
-
 cutoff = pd.to_datetime('2026-07-10') - pd.Timedelta(days=30)
-
 df['segment'] = np.where(
     df['registration_date'] >= cutoff,
     'new user',
     'existing user'
 )
-
 # 2. Prepare events
 events_copy = events.copy()
 events_copy['event_time'] = pd.to_datetime(events_copy['event_time'])
-
 searches = (
     events_copy[events_copy['event_type'] == 'search']
     .sort_values(['user_id', 'event_time'])
@@ -996,7 +991,7 @@ clicks = (
     .sort_values(['user_id', 'event_time'])
     .rename(columns={'event_time': 'click_time'})
 )
-# f clicks must be uniquely attributed, I would instead map each click backward to the most recent search and ensure one-to-one attribution.
+# if clicks must be uniquely attributed, I would instead map each click backward to the most recent search and ensure one-to-one attribution.
 matched_clicks = pd.merge_asof(
     clicks.sort_values('click_time'),
     searches.sort_values('search_time'),
@@ -1050,5 +1045,35 @@ df_sorted = status_log.sort_values('changed_at')
 final_df = df_sorted.drop_duplicates(subset=['page_id'], keep='last')
 active = final_df[final_df['status'] == 'on']['page_id'].count()
 #A new session starts after 30 minutes of inactivity. Return user_id, session_id, and events_in_session.
+import pandas as pd
 
+def sessionize(events):
+    events = events.copy()
+    events['event_time'] = pd.to_datetime(events['event_time'])
+    events = (
+        events
+        .sort_values(['user_id','event_time'])
+    )
+    events['gap'] = (
+        events
+        .groupby('user_id')['event_time']
+        .diff()
+    )
+    events['new_session'] = (
+        events['gap'].isna()
+        |
+        (events['gap'] > pd.Timedelta(minutes=30))
+    )
+    events['session_id'] = (
+        events
+        .groupby('user_id')['new_session']
+        .cumsum()
+    )
+    result = (
+        events
+        .groupby(['user_id','session_id'])
+        .size()
+        .reset_index(name='events_in_session')
+    )
+    return result
 
